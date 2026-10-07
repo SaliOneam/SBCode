@@ -41,6 +41,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -189,12 +191,11 @@ fun EditorScreen(projectDir: File, onClose: () -> Unit) {
         }
     }
 
-    BackHandler {
-        saveAllNow()
-        onClose()
-    }
+    // The phone's Back button does nothing in the editor: Home in the menu is the way to the first panel.
+    // This empty handler swallows the press, so Android doesn't leave the screen.
+    BackHandler { }
 
-    // Registered after the one above, so it is asked first: Back closes the menu before leaving.
+    // Registered after the one above, so it is asked first: with the menu open, Back closes the menu.
     BackHandler(enabled = menuOpen) { menuOpen = false }
 
     AutoSave(docs)
@@ -391,6 +392,12 @@ fun EditorScreen(projectDir: File, onClose: () -> Unit) {
         open = menuOpen,
         dark = SbPalette.dark,
         onToggleDark = { SbPalette.setDark(context, !SbPalette.dark) },
+        onHome = {
+            // Home: save what is open, close the menu and go back to the first panel.
+            saveAllNow()
+            menuOpen = false
+            onClose()
+        },
         onClose = { menuOpen = false },
     )
     }
@@ -517,7 +524,7 @@ private fun AutoSave(docs: List<OpenDoc>) {
 
 /** The menu that slides in from the left when you tap the three lines. */
 @Composable
-private fun SideMenu(open: Boolean, dark: Boolean, onToggleDark: () -> Unit, onClose: () -> Unit) {
+private fun SideMenu(open: Boolean, dark: Boolean, onToggleDark: () -> Unit, onHome: () -> Unit, onClose: () -> Unit) {
     val noRipple = remember { MutableInteractionSource() }
 
     // dimmed background; tapping it closes the menu
@@ -547,30 +554,93 @@ private fun SideMenu(open: Boolean, dark: Boolean, onToggleDark: () -> Unit, onC
                 .clickable(interactionSource = noRipple, indication = null, onClick = {}) // keeps taps inside the panel
                 .padding(16.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                LogoMark(44.dp)
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = buildAnnotatedString {
-                            withStyle(SpanStyle(color = SbAccent)) { append("SB") }
-                            withStyle(SpanStyle(color = SbText)) { append("Code") }
-                        },
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text("Menu", color = SbTextDim, fontSize = 12.sp)
+            Column(
+                Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LogoMark(44.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = buildAnnotatedString {
+                                withStyle(SpanStyle(color = SbAccent)) { append("SB") }
+                                withStyle(SpanStyle(color = SbText)) { append("Code") }
+                            },
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text("Menu", color = SbTextDim, fontSize = 12.sp)
+                    }
                 }
+                Spacer(Modifier.height(20.dp))
+                MenuSwitchRow(
+                    icon = SbIcons.Moon,
+                    title = "Dark Mode",
+                    subtitle = if (dark) "On. Tap to go back to the default color" else "Off. The default navy color",
+                    checked = dark,
+                    onToggle = onToggleDark,
+                )
+                Spacer(Modifier.height(8.dp))
+                // Placeholders: they only hold their place in the menu for now.
+                MenuSoonRow(SbIcons.Extension, "Plugins")
+                Spacer(Modifier.height(8.dp))
+                MenuSoonRow(SbIcons.Palette, "Theme")
+                Spacer(Modifier.height(8.dp))
+                MenuSoonRow(SbIcons.Display, "Multi Display")
             }
-            Spacer(Modifier.height(20.dp))
-            MenuSwitchRow(
-                icon = SbIcons.Moon,
-                title = "Dark mode",
-                subtitle = if (dark) "On. Tap to go back to the default color" else "Off. The default navy color",
-                checked = dark,
-                onToggle = onToggleDark,
+            Spacer(Modifier.height(10.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(SbCardBorder)
             )
+            Spacer(Modifier.height(10.dp))
+            MenuActionRow(SbIcons.Home, "Home", onHome)
         }
+    }
+}
+
+/** A menu item that is not built yet: it is visible but does nothing. */
+@Composable
+private fun MenuSoonRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(SbCard)
+            .border(1.dp, SbCardBorder, shape)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SbIcon(icon, SbTextMuted, 24.dp)
+        Spacer(Modifier.width(12.dp))
+        Text(title, color = SbTextDim, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+        Text("Soon", color = SbTextMuted, fontSize = 11.sp)
+    }
+}
+
+/** A menu item that does something when tapped. */
+@Composable
+private fun MenuActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(SbPrimary.copy(alpha = 0.18f))
+            .border(1.dp, SbCardBorder, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SbIcon(icon, SbAccent, 24.dp)
+        Spacer(Modifier.width(12.dp))
+        Text(title, color = SbText, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+        SbIcon(SbIcons.ChevronRight, SbTextDim, 20.dp)
     }
 }
 
