@@ -12,6 +12,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -65,6 +66,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -142,6 +144,9 @@ fun EditorScreen(projectDir: File, onClose: () -> Unit) {
     val hardwareKeyboard = rememberHasHardwareKeyboard()
     val typingMode = imeVisible && !hardwareKeyboard
     var menuOpen by remember { mutableStateOf(false) }
+    var multiOpen by remember { mutableStateOf(false) }
+    // The screen behind the Multi Display panel gets blurred smoothly (Android 12 and newer; older ones just get darker).
+    val blurRadius by animateDpAsState(targetValue = if (multiOpen) 14.dp else 0.dp, animationSpec = tween(300), label = "multiBlur")
 
     fun toast(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
 
@@ -270,7 +275,7 @@ fun EditorScreen(projectDir: File, onClose: () -> Unit) {
 
     // All the state above lives outside this block, so turning the phone keeps your tabs and text.
     Box(Modifier.fillMaxSize()) {
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize().blur(blurRadius)) {
         if (maxHeight > maxWidth) {
             // ---- portrait: tabs on top, then the code, then the buttons, then the explorer and LOG
             Column(Modifier.fillMaxSize()) {
@@ -398,7 +403,21 @@ fun EditorScreen(projectDir: File, onClose: () -> Unit) {
             menuOpen = false
             onClose()
         },
+        onMultiDisplay = {
+            menuOpen = false
+            multiOpen = true
+        },
         onClose = { menuOpen = false },
+    )
+    // Phone 1 (the project owner) enters from here, so only the This Project button is offered.
+    MultiDisplayPanel(
+        visible = multiOpen,
+        mode = MultiDisplayMode.ThisProject,
+        onClose = { multiOpen = false },
+        onChoose = {
+            multiOpen = false
+            toast("Connecting comes in the next step")
+        },
     )
     }
 
@@ -524,7 +543,14 @@ private fun AutoSave(docs: List<OpenDoc>) {
 
 /** The menu that slides in from the left when you tap the three lines. */
 @Composable
-private fun SideMenu(open: Boolean, dark: Boolean, onToggleDark: () -> Unit, onHome: () -> Unit, onClose: () -> Unit) {
+private fun SideMenu(
+    open: Boolean,
+    dark: Boolean,
+    onToggleDark: () -> Unit,
+    onHome: () -> Unit,
+    onMultiDisplay: () -> Unit,
+    onClose: () -> Unit,
+) {
     val noRipple = remember { MutableInteractionSource() }
 
     // dimmed background; tapping it closes the menu
@@ -588,7 +614,7 @@ private fun SideMenu(open: Boolean, dark: Boolean, onToggleDark: () -> Unit, onH
                 Spacer(Modifier.height(8.dp))
                 MenuSoonRow(SbIcons.Palette, "Theme")
                 Spacer(Modifier.height(8.dp))
-                MenuSoonRow(SbIcons.Display, "Multi Display")
+                MenuActionRow(SbIcons.Display, "Multi Display", onMultiDisplay)
             }
             Spacer(Modifier.height(10.dp))
             Box(

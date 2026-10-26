@@ -4,6 +4,8 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -44,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -163,6 +166,9 @@ fun ProjectsScreen(onOpenProject: (File) -> Unit, onExit: () -> Unit) {
     var loaded by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var dialog by remember { mutableStateOf<ProjectsDialog?>(null) }
+    var multiOpen by remember { mutableStateOf(false) }
+    // The screen behind the Multi Display panel gets blurred smoothly (Android 12 and newer; older ones just get darker).
+    val blurRadius by animateDpAsState(targetValue = if (multiOpen) 14.dp else 0.dp, animationSpec = tween(300), label = "multiBlur")
 
     LaunchedEffect(Unit) {
         projects = withContext(Dispatchers.IO) {
@@ -174,7 +180,8 @@ fun ProjectsScreen(onOpenProject: (File) -> Unit, onExit: () -> Unit) {
 
     val shown = if (query.isBlank()) projects.take(10) else projects.filter { it.name.contains(query.trim(), ignoreCase = true) }
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize().blur(blurRadius)) {
     if (maxHeight > maxWidth) {
         PortraitProjects(
             shown = shown,
@@ -185,6 +192,7 @@ fun ProjectsScreen(onOpenProject: (File) -> Unit, onExit: () -> Unit) {
             onNew = { dialog = ProjectsDialog.New },
             onOpen = { dialog = ProjectsDialog.Open },
             onCreator = { dialog = ProjectsDialog.Creator },
+            onMultiDisplay = { multiOpen = true },
             onExit = onExit,
             onOpenProject = onOpenProject,
             wide = maxWidth >= 412.dp,
@@ -198,6 +206,7 @@ fun ProjectsScreen(onOpenProject: (File) -> Unit, onExit: () -> Unit) {
             onNew = { dialog = ProjectsDialog.New },
             onOpen = { dialog = ProjectsDialog.Open },
             onCreator = { dialog = ProjectsDialog.Creator },
+            onMultiDisplay = { multiOpen = true },
             onExit = onExit,
         )
         Column(
@@ -240,6 +249,17 @@ fun ProjectsScreen(onOpenProject: (File) -> Unit, onExit: () -> Unit) {
         }
     }
     }
+    }
+    // Phone 2 (code screen) enters from here, so only the Code Display button is offered.
+    MultiDisplayPanel(
+        visible = multiOpen,
+        mode = MultiDisplayMode.CodeDisplay,
+        onClose = { multiOpen = false },
+        onChoose = {
+            multiOpen = false
+            Toast.makeText(context, "Connecting comes in the next step", Toast.LENGTH_SHORT).show()
+        },
+    )
     }
 
     when (dialog) {
@@ -319,6 +339,7 @@ private fun Sidebar(
     onNew: () -> Unit,
     onOpen: () -> Unit,
     onCreator: () -> Unit,
+    onMultiDisplay: () -> Unit,
     onExit: () -> Unit,
 ) {
     Column(
@@ -348,6 +369,8 @@ private fun Sidebar(
         SideItem(SbIcons.FolderOpen, "Open Project", highlighted = false, onClick = onOpen)
         Spacer(Modifier.height(6.dp))
         SideItem(SbIcons.Person, "Creator", highlighted = false, onClick = onCreator)
+        Spacer(Modifier.height(6.dp))
+        SideItem(SbIcons.Display, "Multi Display", highlighted = false, onClick = onMultiDisplay)
         Spacer(Modifier.height(6.dp))
         SideItem(SbIcons.Logout, "Exit", highlighted = false, onClick = onExit)
         Spacer(Modifier.height(24.dp))
@@ -491,6 +514,7 @@ private fun PortraitProjects(
     onNew: () -> Unit,
     onOpen: () -> Unit,
     onCreator: () -> Unit,
+    onMultiDisplay: () -> Unit,
     onExit: () -> Unit,
     onOpenProject: (File) -> Unit,
     wide: Boolean,
@@ -522,6 +546,7 @@ private fun PortraitProjects(
                 SideItem(SbIcons.NoteAdd, "New Project", highlighted = true, onClick = onNew, iconSize = 30.dp, fontSize = 20.sp, vPad = 16.dp, hPad = 18.dp)
                 SideItem(SbIcons.FolderOpen, "Open Project", highlighted = false, onClick = onOpen, iconSize = 30.dp, fontSize = 20.sp, vPad = 16.dp, hPad = 18.dp)
                 SideItem(SbIcons.Person, "Creator", highlighted = false, onClick = onCreator, iconSize = 30.dp, fontSize = 20.sp, vPad = 16.dp, hPad = 18.dp)
+                SideItem(SbIcons.Display, "Multi Display", highlighted = false, onClick = onMultiDisplay, iconSize = 30.dp, fontSize = 20.sp, vPad = 16.dp, hPad = 18.dp)
                 SideItem(SbIcons.Logout, "Exit", highlighted = false, onClick = onExit, iconSize = 30.dp, fontSize = 20.sp, vPad = 16.dp, hPad = 18.dp)
             }
         }
